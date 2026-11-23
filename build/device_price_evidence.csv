@@ -1,0 +1,5 @@
+device_id,effective_from,unit_price_cents,vendor,invoice,invoice_event_id,po_event_id,source_file,source_line
+FIX-1,2025-01-01,2100,HORIZON,INV-510,I-F1,P-F1,fixtures/01_initial/invoices.csv,4
+FIX-1,2025-07-01,2400,HORIZON,INV-519,I-F2,P-F2,fixtures/02_followup/invoices.csv,6
+MESH-A,2025-01-01,12000,STERILE,INV-380,I-A1,P-A,fixtures/01_initial/invoices.csv,2
+MESH-B,2025-01-01,17500,HORIZON,INV-481,I-B1,P-B,fixtures/02_followup/invoices.csv,4

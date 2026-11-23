@@ -1,0 +1,4 @@
+event_id,vendor,invoice,po,po_line,sku,date,qty,unit,unit_price
+I-A1,Sterile Supply Co.,INV-380,PO-100,1,ST-A,2025-01-04,6,EA,120
+I-B0,Horizon Devices,INV-480,PO-200,1,HZ-B,2025-01-05,4,EA,200
+I-F1,Horizon Devices,INV-510,PO-300,1,HZ-F,2025-01-04,10,EA,21.00

@@ -1,0 +1,6 @@
+vendor,invoice,active_lines,priced_lines,unpriced_lines,exception_lines,price_variance_lines,priced_delta_cents,covered_eaches,unbacked_eaches,unbacked_po_cents,unknown_exposure_lines
+HORIZON,INV-499,1,0,1,1,0,,,,,1
+HORIZON,INV-610,1,1,0,1,0,0,80,20,20000,0
+HORIZON,INV-611,1,1,0,1,0,0,0,10,10000,0
+HORIZON,INV-620,1,1,0,1,0,0,,,,1
+STERILE,INV-391,1,1,0,1,1,3000,6,0,0,0

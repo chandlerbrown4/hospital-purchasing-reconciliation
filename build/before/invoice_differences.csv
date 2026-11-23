@@ -1,0 +1,2 @@
+vendor,invoice,active_lines,priced_lines,unpriced_lines,exception_lines,price_variance_lines,priced_delta_cents,covered_eaches,unbacked_eaches,unbacked_po_cents,unknown_exposure_lines
+HORIZON,INV-480,1,1,0,1,1,10000,4,0,0,0

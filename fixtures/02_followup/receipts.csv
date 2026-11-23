@@ -1,0 +1,9 @@
+record_id,supplier,order_no,line_no,item_code,event_date,quantity,uom,action,prior_event
+R-A1,STERILE SUPPLY,PO-100,1,ST-A,2025-01-03,6,EA,,
+R-A2,STERILE SUPPLY,PO-100,1,ST-A,2025-01-07,4,EA,,
+R-A2-C,STERILE SUPPLY,PO-100,1,ST-A,2025-01-07,1,BX,replace,R-A2
+R-X,Horizon Medical Devices,PO-201,,HZ-B,2025-01-07,1,EA,,
+R-F2,Horizon Medical Devices,PO-301,1,HZ-F,2025-07-02,2,PK,,
+R-S,Horizon Devices,PO-400,1,HZ-C,2025-07-02,80,EA,,
+R-Q,Horizon Devices,PO-401,1,HZ-C,2025-07-02,80,EA,,
+R-Q,Horizon Devices,PO-401,1,HZ-C,2025-07-02,100,EA,,
