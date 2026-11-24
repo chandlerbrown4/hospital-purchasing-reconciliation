@@ -35,6 +35,22 @@ class DuplicateInvoiceTests(unittest.TestCase):
         self.assertTrue({"O01", "C01", "C02"} <= evidence_ids)
         self.assertNotIn("O02", evidence_ids)
 
+    def test_original_duplicate_with_explicit_claims_on_the_same_shipment(self):
+        fixture = ROOT / FIXTURE
+        with TemporaryDirectory() as folder:
+            tmp = Path(folder)
+            application_file = tmp / "applications.csv"
+            application_file.write_text(
+                "vendor_id,invoice_event_id,voucher_id,voucher_line,invoice,receipt_event_id,applied_eaches,applied_cents\n"
+                "BIRCH,O01,V01,1,bg402,R06,3,13800\n"
+                "BIRCH,O02,V01,2,BG402,R06,3,13800\n"
+            )
+            run([fixture / "batch"], fixture, tmp / "out", receipt_applications=application_file)
+            with closing(sqlite3.connect(tmp / "out/reconciliation.sqlite")) as db:
+                rows = dict(db.execute("SELECT event_id, decision FROM invoice_lines"))
+            self.assertEqual([rows[k] for k in ("O01", "O02", "C01", "C02")],
+                             ["matched", "possible_duplicate_invoice", "matched", "matched"])
+
     def test_hold_does_not_consume_coverage_and_reversal_releases_surviving_copy(self):
         # The first import has a later lexical ID. Both representations charge a dollar high.
         fixture = ROOT / FIXTURE
