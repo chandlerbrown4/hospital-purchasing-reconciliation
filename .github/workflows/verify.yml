@@ -11,11 +11,15 @@ jobs:
         python-version: ["3.11", "3.13"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
       - name: Run the test suite
         run: python3 -m unittest discover -s tests -v
+      - name: Reproduce the frozen held-out scorecard
+        run: python3 evaluation/score_holdout.py
       - name: Run the documented demo
         run: python3 -m purchasing
       - name: Check the published example against the demo

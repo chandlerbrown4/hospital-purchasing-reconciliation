@@ -1,6 +1,37 @@
 # Hospital Purchasing Reconciliation
 
-A reproducible three-way match for hospital purchase orders, deliveries, and invoices. The two batches and vendor mappings contain entirely fictional records.
+A reproducible three-way match for hospital purchase orders, deliveries, and invoices. The demo and the held-out evaluation use fictional transactions and vendor mappings.
+
+## Held-out purchasing scorecard
+
+We froze the reconciler at `6f56105`, then committed the batch and its expected answers at `a2a89f7` before the first run. Nine invoice lines adapt examples written by Microsoft, ERPNext and Oracle. Eight more are locally authored controls. The CSVs and labels were prepared here from the source scenarios. This measures performance on these specific cases. [Case provenance and scoring rules](evaluation/held-out-v1/PROTOCOL.md)
+
+<!-- held-out-v1:start -->
+**16 of 17 invoice lines matched the answer key** on both routing and amounts.
+Of 7 lines accepted as clean, **1 was a false accept**.
+The pipeline sent 2 to review. The answer key called for review on 2 of those lines.
+
+| Expected decision | Accepted as clean | Flagged a discrepancy | Sent to review | Missing |
+| --- | ---: | ---: | ---: | ---: |
+| Clean | 6 | 0 | 0 | 0 |
+| Exception | 0 | 8 | 0 | 0 |
+| Review | 1 | 0 | 2 | 0 |
+
+Exact results by origin were 8/9 for externally sourced cases and 8/8 for local controls.
+Unexpected output lines: 0. Correctly routed lines with wrong amounts: 0.
+<!-- held-out-v1:end -->
+
+- **Correct discrepancy.** On the final drive invoice (M06), the vendor billed 200 at $10.80 against a $10 order. Earlier invoices had consumed 900 of the 1,000 delivered drives. The engine reported a $160 price difference and separately identified 100 units without remaining coverage, worth $1,000 at the PO rate.
+- **Correct review.** C05 could refer to either of two PO lines, priced at $44 and $46. C06 had a single receipt reference reporting both four and six lamps. The engine withheld the unresolved quantities for both, while retaining the known $0 price difference on C06.
+- **Wrongly accepted as clean.** O01 and O02 represent one $138 supplier invoice entered as `bg402` and `BG402` under different import IDs. The 12 received lamps covered both three-lamp entries, so the engine accepted both. This exposes $138 to possible duplicate payment. In the control pair C01/C02, two distinct $184 invoices and deliveries were correctly accepted.
+
+The line-level scorecard includes the expected and actual decision, price difference, unbacked quantity and dollar exposure. Each result names the PO and receipts used by the engine. [Score all 17 lines](evaluation/held-out-v1/results.csv) · [Inspect the source invoices](evaluation/held-out-v1/batch/invoices.csv) · [Read the locked answer key](evaluation/held-out-v1/expected.csv)
+
+To reproduce the score from a full Git clone, run the command below. It runs the pinned engine and batch in a temporary directory, then checks the README totals and the published CSV against the run.
+
+```sh
+python3 evaluation/score_holdout.py
+```
 
 ## Follow one box into a surgical case
 
