@@ -1,0 +1,18 @@
+event_id,source,decision,price_delta_cents,unbacked_eaches,quantity_exposure_cents,evidence
+M01,Microsoft,exception,50000,0,0,Five received. Each billed 100 dollars above the order.
+M02,Microsoft,exception,0,2,500000,Two computers billed at the PO rate before any receipt was posted.
+M03,Microsoft,exception,200,2,8000,Two mice billed a dollar high and neither has a posted receipt.
+M04,Microsoft,exception,64000,0,0,First 800 drives billed 80 cents high. The delivery covers them.
+M05,Microsoft,exception,8000,0,0,Next 100 drives billed 80 cents high. Cumulative billed quantity is 900.
+M06,Microsoft,exception,16000,100,100000,Last 200 billed 80 cents high. Only 100 of those remain covered.
+F01,ERPNext,clean,0,0,0,Order and invoice are fully received at the agreed rate on the same date.
+O01,Oracle,clean,0,0,0,First entry of a valid three-lamp document. Twelve lamps were received.
+O02,Oracle,review,0,,,Second entry of the same supplier document with only its case changed. Hold the copy. PO rate is known.
+C01,Control,clean,0,0,0,First four lamps have a receipt and their own invoice.
+C02,Control,clean,0,0,0,Four more lamps have a separate receipt and distinct invoice at the same amount.
+C03,Control,clean,0,0,0,Two of three delivered packs billed in eaches. Four gloves per 14-dollar pack.
+C04,Control,exception,-100,0,0,Last four gloves cost 25 cents less per each than ordered.
+C05,Control,review,,,,Two received lines for the same SKU have different rates. The invoice omits the line.
+C06,Control,review,0,,,One receipt reference has incompatible quantities. The order rate still establishes the price difference.
+C07,Control,exception,0,2,9200,Two lamps billed two days before the delivery at 46 dollars each.
+C08,Control,clean,0,0,0,Five lamps have now arrived. After the earlier two billed lamps three remain.
