@@ -2,6 +2,25 @@
 
 A reproducible three-way match for hospital purchase orders, deliveries, and invoices. The two batches and vendor mappings contain entirely fictional records.
 
+## Follow one box into a surgical case
+
+PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. The reconciler checks the receipt, converts the box price to cents per implant and exports a dated catalog row. The companion `surgical-case-outcomes` project uses that row to price the quantity implanted on each surgery date.
+
+| Synthetic record | Original | After the source price change |
+| --- | ---: | ---: |
+| PO-100, six implants per box | $720.00 | $726.00 |
+| INV-380, invoice price per implant | $120.00 | $121.00 |
+| Exported MESH-A rate in cents per implant | 12,000 | 12,100 |
+| Surgical case S001, one MESH-A plus fixation and other case costs | $4,304.50 | $4,305.50 |
+
+The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
+
+With both repositories checked out side by side, run this from the purchasing repository:
+
+```sh
+python3 ../surgical-case-outcomes/examples/check_purchasing_handoff.py --purchasing .
+```
+
 ## What the demo finds
 
 | Invoice | Finding |
