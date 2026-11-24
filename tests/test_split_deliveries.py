@@ -86,6 +86,17 @@ class SplitDeliveryTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.replay(changed)["B"][0], "possible_duplicate_invoice")
 
+    def test_unresolved_sibling_only_blocks_a_plausible_order_line(self):
+        target = self.batch / "invoices.csv"
+        original = target.read_text()
+        for po_line, expected in (("2", "insufficient_receipts"), ("1", "possible_duplicate_invoice"),
+                                  ("", "possible_duplicate_invoice")):
+            with self.subTest(po_line=po_line):
+                target.write_text(original + f"X,Demo,EARLY,P1,{po_line},T,2024-12-29,1,EA,17\n")
+                results = self.replay(self.links)
+                self.assertEqual(results["B"][0], expected)
+                self.assertIn(results["X"][0], ("before_po_date", "no_po_line"))
+
     def test_supplier_price_discrepancy_survives_split_confirmation(self):
         self.shipments(second_date="2025-01-04")
         path = self.batch / "po_lines.csv"

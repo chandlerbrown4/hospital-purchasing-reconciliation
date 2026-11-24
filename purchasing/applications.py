@@ -79,13 +79,17 @@ def apply_split_evidence(invoices, receipts, uncertain, applications):
             owners[vendor, a.voucher, a.voucher_line].add(event_id)
 
     by_order_line = defaultdict(list)
-    unresolved = set()
+    unresolved_lines = set()
+    unresolved_items = set()
     for line in invoices:
         if line.po:
             by_order_line[line.po.key].append(line)
         else:
             event = line.source.event
-            unresolved.add((event.vendor, event.po, event.sku))
+            if event.po_line:
+                unresolved_lines.add((event.vendor, event.po, event.po_line))
+            else:
+                unresolved_items.add((event.vendor, event.po, event.sku))
 
     for key, lines in by_order_line.items():
         po = lines[0].po
@@ -93,7 +97,8 @@ def apply_split_evidence(invoices, receipts, uncertain, applications):
         for line in lines:
             families[line.first_entry].append(line)
         repeats = [family for family in families.values() if len(family) > 1]
-        if not repeats or uncertain[key] or (po.vendor, po.po, po.sku) in unresolved:
+        if (not repeats or uncertain[key] or (po.vendor, po.po, po.po_line) in unresolved_lines
+                or (po.vendor, po.po, po.sku) in unresolved_items):
             continue
         shipments = {r.event_id: r for r in receipts[key]}
         if not validate_order_line(lines, shipments, applications, claimants, owners):
