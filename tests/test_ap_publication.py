@@ -117,7 +117,7 @@ class APTests(unittest.TestCase):
         before = {name: (self.out / name).read_bytes() for name in OUTPUT_NAMES}
         self.assertEqual(rows(prior / "ap_invoice_rows.csv")[1]["decision"], "possible_duplicate_invoice")
         first, second = self.original
-        write_rows(self.invoices, first, [first, dict(second, date="2025-03-04")])
+        write_rows(self.invoices, first, [first, dict(second, invoice="BG403")])
         self.assertEqual(interrupted_build(self.batch, self.out, "current", "before"), 91)
         self.assertEqual({name: (self.out / name).read_bytes() for name in OUTPUT_NAMES}, before)
         self.assert_exports_agree(self.out)
@@ -150,11 +150,11 @@ class APTests(unittest.TestCase):
         self.assert_exports_agree(empty)
 
     def test_concurrent_builds_keep_both_pinned_results_and_one_complete_publication(self):
-        shifted = Path(shutil.copytree(self.batch, self.base / "shifted"))
+        distinct = Path(shutil.copytree(self.batch, self.base / "distinct"))
         first, second = self.original
-        write_rows(shifted / "invoices.csv", first, [first, dict(second, date="2025-03-04")])
+        write_rows(distinct / "invoices.csv", first, [first, dict(second, invoice="BG403")])
         with ThreadPoolExecutor(max_workers=2) as pool:
-            builds = [pool.submit(build_snapshot, [batch], FIXTURE, self.out) for batch in (self.batch, shifted)]
+            builds = [pool.submit(build_snapshot, [batch], FIXTURE, self.out) for batch in (self.batch, distinct)]
             directories = [job.result().directory for job in builds]
         for path, expected in zip(directories, ["possible_duplicate_invoice", "matched"]):
             self.assertEqual(rows(path / "ap_invoice_rows.csv")[1]["decision"], expected)

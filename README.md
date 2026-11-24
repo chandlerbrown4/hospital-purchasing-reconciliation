@@ -84,7 +84,11 @@ python3 evaluation/score_holdout.py
 
 ## How the duplicate check works
 
-After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. A complete voucher-to-receipt application extract can resolve a repeat as a split delivery.
+After reversals and replacements, the engine compares entries with the same normalized supplier invoice number, resolved vendor and PO line, quantity in eaches, and total merchandise charge. It checks the invoice date against earlier surviving originals. A date on the same calendar day, one day earlier, or one day later triggers review. A held copy cannot extend that window. The AP register gives the dates and event IDs so an analyst can find both entries.
+
+For example, moving the second $138 entry from March 3 to March 4 still holds O02 against O01. Moving the second $184 invoice to March 4 still clears both B-801 and B-802 because their supplier invoice numbers differ and both deliveries cover the bills. These date variations are regression cases. [Date-window tests](tests/test_duplicate_invoices.py)
+
+The original retains its normal decision. The held row keeps its own audit record and any known price difference. Its quantity exposure remains unknown pending review. It consumes no receipt coverage, adds no second price variance to the invoice total, and supplies no catalog price. A complete voucher-to-receipt application extract can resolve the repeat as a split delivery.
 
 ### Clearing a split delivery
 

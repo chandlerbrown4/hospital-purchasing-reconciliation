@@ -73,6 +73,50 @@ class SplitDeliveryTests(unittest.TestCase):
         records[2][5] = "S2"
         return records
 
+    def test_one_day_shift_requires_the_same_split_evidence_and_preserves_exceptions(self):
+        invoices = self.batch / "invoices.csv"
+        invoices.write_text(invoices.read_text().replace("B,Demo,SP-1,P1,1,T,2025-01-04",
+                                                         "B,Demo,SP-1,P1,1,T,2025-01-05"))
+        self.assertEqual(self.replay([])["B"][:2], ("possible_duplicate_invoice", None))
+        late = self.replay(self.links)["B"]
+        self.assertEqual(late[:2], ("insufficient_receipts", 1))
+        self.assertIn("distinct split deliveries confirmed", late[2])
+        self.shipments(second_date="2025-01-05")
+        distinct = self.replay(self.links)
+        self.assertEqual([distinct[k][:2] for k in ("A", "B")], [("matched", 0)] * 2)
+        shared = self.replay(self.shared_links(), include_billed=True)
+        self.assertEqual([shared[k][:2] for k in ("A", "B")], [("matched", 0)] * 2)
+        self.assertIn("shared shipment fully allocated", shared["B"][2])
+        self.assertEqual(self.replay([r[:-1] for r in self.shared_links()])["B"][:2],
+                         ("possible_duplicate_invoice", None))
+        po = self.batch / "po_lines.csv"
+        po.write_text(po.read_text().replace("17.00", "16.00"))
+        self.assertEqual(self.replay(self.links)["B"][0], "price_variance")
+
+    def test_adjacent_dates_do_not_chain_and_a_bridge_needs_proof_for_both_originals(self):
+        self.shipments(second_date="2025-01-04")
+        invoices = self.batch / "invoices.csv"
+        header = "event_id vendor invoice po po_line sku date qty unit unit_price"
+
+        def write_dates(dates):
+            feed(invoices, header, [(event, "Demo", "SP-1", "P1", 1, "T", date, 1, "EA", 17)
+                                    for event, date in zip("ABC", dates)])
+
+        write_dates(["2025-01-04", "2025-01-05", "2025-01-06"])
+        chronological = self.replay([])
+        self.assertEqual([chronological[k][0] for k in "ABC"], ["matched", "possible_duplicate_invoice", "matched"])
+        write_dates(["2025-01-04", "2025-01-06", "2025-01-05"])
+        links = [r.copy() for r in self.links]
+        links[2] = ["DEMO", "C", "V1", "30", "SP-1", "SPARE", 1, 1700]
+        links[1][2] = "OTHER-VOUCHER"
+        bridge = self.replay(links)["C"]
+        self.assertEqual(bridge[0], "possible_duplicate_invoice")
+        self.assertIn("A (2025-01-04)", bridge[2])
+        self.assertIn("B (2025-01-06)", bridge[2])
+        links[1][2] = "V1"
+        verified = self.replay(links)
+        self.assertEqual([verified[k][0] for k in "ABC"], ["matched"] * 3)
+
     def test_complete_shared_shipment_preserves_dated_quantities_and_proof(self):
         records = self.shared_links()
         results = self.replay(records, include_billed=True)
