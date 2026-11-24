@@ -10,7 +10,7 @@ class InvoiceLine:
     source: SourceRow
     po: Event | None = None
     first_entry: str | None = None
-    split_confirmed: bool = False
+    split_basis: str = ""
     allocations: tuple[Application, ...] = ()
     delivered_eaches: int | None = None
     cumulative_billed_eaches: int | None = None
@@ -145,7 +145,7 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     if line.expected_cents is not None:
         line.delta_cents = invoice.amount_cents - line.expected_cents
 
-    if line.first_entry != invoice.event_id and not line.split_confirmed:
+    if line.first_entry != invoice.event_id and not line.split_basis:
         row.decision = "possible_duplicate_invoice"
         row.reason = (f"same vendor invoice, PO line, date, quantity and amount as active event {line.first_entry}; "
                       "hold this entry pending document review")
@@ -189,7 +189,7 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     if line.allocations:
         a = line.allocations[0]
         links = ", ".join(sorted(record.receipt for record in line.allocations))
-        basis = "distinct split deliveries confirmed" if line.split_confirmed else "receipt applications verified"
+        basis = line.split_basis or "receipt applications verified"
         row.reason += f"; {basis} in snapshot for voucher {a.voucher} line {a.voucher_line}, shipments: {links}"
 
 

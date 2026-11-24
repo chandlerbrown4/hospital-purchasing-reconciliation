@@ -46,9 +46,11 @@ class SplitDeliveryTests(unittest.TestCase):
             ("SPARE", "Demo", "P1", 1, "T", "2025-01-02", 1, "EA"),
         ])
 
-    def replay(self, links):
-        feed(self.apps, "vendor_id invoice_event_id voucher_id voucher_line invoice receipt_event_id applied_eaches applied_cents",
-             links)
+    def replay(self, links, *, include_billed=False):
+        header = "vendor_id invoice_event_id voucher_id voucher_line invoice receipt_event_id applied_eaches applied_cents"
+        if include_billed:
+            header += " billed_eaches"
+        feed(self.apps, header, links)
         run([self.batch], self.base, self.base / "out", receipt_applications=self.apps)
         with closing(sqlite3.connect(self.base / "out/reconciliation.sqlite")) as db:
             return {r[0]: r[1:] for r in db.execute("""
@@ -64,6 +66,44 @@ class SplitDeliveryTests(unittest.TestCase):
         self.assertEqual(results["C"][:2], ("matched", 0))
         self.shipments(second_date="2025-01-04")
         self.assertEqual(self.replay(self.links)["B"][:2], ("matched", 0))
+
+    def shared_links(self):
+        records = [row + [1] for row in self.links]
+        records[1][5] = "S1"
+        records[2][5] = "S2"
+        return records
+
+    def test_complete_shared_shipment_preserves_dated_quantities_and_proof(self):
+        records = self.shared_links()
+        results = self.replay(records, include_billed=True)
+        for key in ("A", "B"):
+            self.assertEqual(results[key][:2], ("matched", 0))
+            self.assertIn("shared shipment fully allocated", results[key][2])
+        with closing(sqlite3.connect(self.base / "out/reconciliation.sqlite")) as db:
+            self.assertEqual(db.execute("""
+                SELECT voucher_line, receipt_event_id, billed_eaches, applied_eaches, applied_cents
+                FROM verified_receipt_applications WHERE split_confirmed = 1 ORDER BY voucher_line
+            """).fetchall(), [("10", "S1", 1, 1, 1700), ("20", "S1", 1, 1, 1700)])
+        receipts = self.batch / "receipts.csv"
+        receipts.write_text(receipts.read_text().replace("S1,Demo,P1,1,T,2025-01-02", "S1,Demo,P1,1,T,2025-01-05"))
+        late = self.replay(records, include_billed=True)
+        for key in ("A", "B"):
+            self.assertEqual(late[key][:2], ("insufficient_receipts", 1))
+
+    def test_balanced_total_requires_independent_line_level_billing_evidence(self):
+        records = self.shared_links()
+        self.assertEqual(self.replay([r[:-1] for r in records])["B"][0], "possible_duplicate_invoice")
+        for column, value in ((8, 2), (8, ""), (8, "unknown"), (7, 1701), (3, "10"), (2, "OTHER")):
+            with self.subTest(column=column, value=value):
+                changed = [r.copy() for r in records]
+                changed[1][column] = value
+                self.assertEqual(self.replay(changed, include_billed=True)["B"][:2],
+                                 ("possible_duplicate_invoice", None))
+        receipts = self.batch / "receipts.csv"
+        receipts.write_text(receipts.read_text().replace("2025-01-02,2,EA", "2025-01-02,3,EA"))
+        self.assertEqual(self.replay(records, include_billed=True)["B"][0], "possible_duplicate_invoice")
+        records[2][5] = "S1"  # The family leaves one unit for a third voucher.
+        self.assertEqual(self.replay(records, include_billed=True)["B"][0], "possible_duplicate_invoice")
 
     def test_ambiguous_evidence_keeps_the_hold(self):
         scenarios = {

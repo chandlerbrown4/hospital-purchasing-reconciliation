@@ -41,9 +41,9 @@ class DuplicateInvoiceTests(unittest.TestCase):
             tmp = Path(folder)
             application_file = tmp / "applications.csv"
             application_file.write_text(
-                "vendor_id,invoice_event_id,voucher_id,voucher_line,invoice,receipt_event_id,applied_eaches,applied_cents\n"
-                "BIRCH,O01,V01,1,bg402,R06,3,13800\n"
-                "BIRCH,O02,V01,2,BG402,R06,3,13800\n"
+                "vendor_id,invoice_event_id,voucher_id,voucher_line,invoice,receipt_event_id,applied_eaches,applied_cents,billed_eaches\n"
+                "BIRCH,O01,V01,1,bg402,R06,3,13800,3\n"
+                "BIRCH,O02,V01,2,BG402,R06,3,13800,3\n"
             )
             run([fixture / "batch"], fixture, tmp / "out", receipt_applications=application_file)
             with closing(sqlite3.connect(tmp / "out/reconciliation.sqlite")) as db:

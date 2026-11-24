@@ -47,7 +47,9 @@ Supply an optional application snapshot with the columns `vendor_id,invoice_even
 python3 -m purchasing path/to/batch --mappings path/to/mappings --receipt-applications path/to/applications.csv --output build/review
 ```
 
-The repeated lines must have the same source invoice number and voucher, distinct voucher lines and disjoint shipments. The engine checks the quantities and amounts for every billed line on that PO line, verifies that the order covers the billed quantities and checks the total claimed against each shipment. A third line can share a shipment if every claim reconciles to the accepted quantity or less. An incomplete crosswalk, conflicting receipt, overlapping shipments within the repeat group, or an overdraw leaves the duplicate hold in place.
+The repeated lines must share a source invoice number and voucher and have distinct voucher line IDs. The engine checks billed quantities and amounts for every line on the PO line, the quantity ordered, and every claim against the shipments. Disjoint shipments can support a split delivery.
+
+For lines dividing a single shipment, include the optional `billed_eaches` column from the voucher application source. Each line’s independently reported billed quantity must agree with its invoice line. Applied quantities and cents must reconcile line by line, and the repeated lines together must account for the entire accepted shipment. Missing or contradictory evidence keeps the duplicate hold. Partial overlap across multiple shipments also stays in review. A merchandise match can coexist with a separate ledger discrepancy.
 
 Identity is resolved using the supplied snapshot. Receipt coverage still uses the invoice date. If the assigned second shipment arrived later, the retroactive identity check clears the duplicate hold and reports the original shortfall. The SQLite table `verified_receipt_applications` traces the result to the voucher line, shipment, applied units and cents. The row audit records the decision. [Synthetic split-delivery and ambiguity tests](tests/test_split_deliveries.py)
 

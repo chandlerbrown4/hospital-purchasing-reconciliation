@@ -74,6 +74,7 @@ CREATE TABLE verified_receipt_applications (
     applied_eaches INTEGER NOT NULL,
     applied_cents INTEGER NOT NULL,
     split_confirmed INTEGER NOT NULL,
+    billed_eaches INTEGER,
     PRIMARY KEY (invoice_audit_id, receipt_event_id)
 );
 """
@@ -138,9 +139,9 @@ def run(batches, mappings, output, *, receipt_applications=None):
                     invoice_records,
                 )
                 conn.executemany(
-                    "INSERT INTO verified_receipt_applications VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    "INSERT INTO verified_receipt_applications VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                     ((audit_ids[id(line.source)], a.voucher, a.voucher_line, a.receipt, a.eaches, a.cents,
-                      line.split_confirmed) for line in lines if line.cumulative_billed_eaches is not None
+                      bool(line.split_basis), a.billed_eaches) for line in lines if line.cumulative_billed_eaches is not None
                      for a in line.allocations),
                 )
             cursor = conn.execute(sql)

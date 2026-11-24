@@ -13,6 +13,7 @@ class Application:
     receipt: str
     eaches: int | None
     cents: int | None
+    billed_eaches: int | None = None
 
 
 def unsigned(value, limit):
@@ -27,15 +28,17 @@ def load_applications(path):
     fields = {"vendor_id", "invoice_event_id", "voucher_id", "voucher_line", "invoice",
               "receipt_event_id", "applied_eaches", "applied_cents"}
     by_invoice = defaultdict(list)
-    for number, raw in read_csv(path, fields):
+    for number, raw in read_csv(path, fields, {"billed_eaches"}):
         r = {k: v.strip() for k, v in raw.items()}
         if not r["vendor_id"] or not r["invoice_event_id"]:
             raise ValueError(f"{path}:{number}: application lacks vendor or invoice event identity")
         key = (r["vendor_id"].upper(), r["invoice_event_id"].upper())
+        # A missing legacy column is allowed. A supplied value must be a positive quantity.
+        billed = (unsigned(r["billed_eaches"], MAX_QUANTITY) or 0) if "billed_eaches" in r else None
         by_invoice[key].append(Application(
             r["voucher_id"].upper(), r["voucher_line"].upper(), r["invoice"],
             r["receipt_event_id"].upper(), unsigned(r["applied_eaches"], MAX_QUANTITY),
-            unsigned(r["applied_cents"], MAX_CENTS),
+            unsigned(r["applied_cents"], MAX_CENTS), billed,
         ))
     return by_invoice
 
@@ -57,6 +60,7 @@ def validate_order_line(lines, receipts, applications, claimants, owners):
             if (not a.voucher or not a.voucher_line or a.invoice_number != line.source.raw["invoice"].strip()
                     or len(owners[po.vendor, a.voucher, a.voucher_line]) != 1
                     or a.receipt not in receipts or a.receipt in seen
+                    or (a.billed_eaches is not None and a.billed_eaches != event.eaches)
                     or not a.eaches or a.cents is None
                     or a.cents * event.eaches != event.amount_cents * a.eaches):
                 return False
@@ -105,15 +109,23 @@ def apply_split_evidence(invoices, receipts, uncertain, applications):
             continue
         for family in repeats:
             groups = [applications[po.vendor, line.source.event.event_id] for line in family]
-            # Same source document, distinct voucher lines, mutually disjoint actual shipments.
             if len({(g[0].voucher, g[0].invoice_number) for g in groups}) != 1:
                 continue
-            receipt_ids = [a.receipt for g in groups for a in g]
-            if len(set(receipt_ids)) != len(receipt_ids):
+            records = [a for group in groups for a in group]
+            shipment_ids = {a.receipt for a in records}
+            if len(shipment_ids) == len(records):
+                basis = "distinct split deliveries confirmed"
+            elif (len(shipment_ids) == 1
+                  and all(a.billed_eaches is not None for a in records)
+                  and sum(a.eaches for a in records) == shipments[records[0].receipt].eaches):
+                # The order-line check already balances each line's billed units and value,
+                # rejects reused voucher lines and overdraws, and checks all shipment claimants.
+                basis = "shared shipment fully allocated across distinct voucher lines"
+            else:
                 continue
             for line in family:
-                line.split_confirmed = True
-        if any(line.split_confirmed for line in lines):
+                line.split_basis = basis
+        if any(line.split_basis for line in lines):
             # Don't let another invoice borrow dated coverage earmarked for these lines.
             for line in lines:
                 line.allocations = tuple(applications[po.vendor, line.source.event.event_id])
