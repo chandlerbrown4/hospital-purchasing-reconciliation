@@ -33,6 +33,12 @@ To reproduce the score from a full Git clone, run the command below. It runs the
 python3 evaluation/score_holdout.py
 ```
 
+## Duplicate-invoice regression
+
+The updated engine sends the second $138 entry (O02) to review and links it to the first import (O01). Both distinct $184 invoices (C01 and C02) still pass. The regression test checks all 17 original decisions and their amounts. The scorecard above records the first, frozen run. [Regression tests](tests/test_duplicate_invoices.py)
+
+After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. If two legitimate identical lines on one document have the same signature, the feed needs a stable supplier line identifier to distinguish them.
+
 ## Follow one box into a surgical case
 
 PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. The reconciler checks the receipt, converts the box price to cents per implant and exports a dated catalog row. The companion `surgical-case-outcomes` project uses that row to price the quantity implanted on each surgery date.

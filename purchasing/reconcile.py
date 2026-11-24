@@ -8,6 +8,7 @@ from .inputs import Event, SourceRow
 class InvoiceLine:
     source: SourceRow
     po: Event | None = None
+    first_entry: str | None = None
     delivered_eaches: int | None = None
     cumulative_billed_eaches: int | None = None
     covered_eaches: int | None = None
@@ -129,7 +130,6 @@ def exact_cents(numerator, denominator):
 def reconcile_line(line, receipts, uncertain, prior_billed):
     row, po = line.source, line.po
     invoice = row.event
-    line.cumulative_billed_eaches = prior_billed + invoice.eaches
     confirmed = sorted(
         (receipt for receipt in receipts if receipt.date <= invoice.date),
         key=lambda receipt: (receipt.date, receipt.event_id),
@@ -141,6 +141,14 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     line.expected_cents = exact_cents(po.amount_cents * invoice.eaches, po.eaches)
     if line.expected_cents is not None:
         line.delta_cents = invoice.amount_cents - line.expected_cents
+
+    if line.first_entry != invoice.event_id:
+        row.decision = "possible_duplicate_invoice"
+        row.reason = (f"same vendor invoice, PO line, date, quantity and amount as active event {line.first_entry}; "
+                      "hold this entry pending document review")
+        return
+
+    line.cumulative_billed_eaches = prior_billed + invoice.eaches
 
     flags = []
     if row.uncertain_receipts:
@@ -205,12 +213,22 @@ def reconcile(rows):
             invoices.append(InvoiceLine(row, po))
 
     uncertain = uncertain_receipts(rows, orders)
+    # Elect the first surviving import for each document-line signature. Allocation still
+    # follows invoice date and event ID, even when the first import sorts after its copy.
+    first_entries = {}
+    for line in invoices:
+        if line.po:
+            event = line.source.event
+            signature = (line.po.key, event.invoice, event.date, event.eaches, event.amount_cents)
+            line.first_entry = first_entries.setdefault(signature, event.event_id)
+
     billed = defaultdict(int)
     for line in sorted(invoices, key=lambda line: (line.source.event.date, line.source.event.key)):
         if line.po:
             key = line.po.key
             reconcile_line(line, receipts[key], uncertain[key], billed[key])
-            billed[key] = line.cumulative_billed_eaches
+            if line.cumulative_billed_eaches is not None:
+                billed[key] = line.cumulative_billed_eaches
     return invoices
 
 
