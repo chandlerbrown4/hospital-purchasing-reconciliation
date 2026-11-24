@@ -26,11 +26,15 @@ def main():
     parser.add_argument("batches", nargs="*", type=Path, help="Batch directories in ingestion order")
     parser.add_argument("--mappings", type=Path, default=Path("fixtures"))
     parser.add_argument("--output", type=Path, default=Path("build"))
+    parser.add_argument("--receipt-applications", type=Path,
+                        help="Complete voucher-to-shipment application snapshot for the supplied batches")
     args = parser.parse_args()
+    if args.receipt_applications and not args.batches:
+        parser.error("--receipt-applications requires explicit batch directories")
 
     try:
         if args.batches:
-            report("Active invoice exceptions", run(args.batches, args.mappings, args.output))
+            report("Active invoice exceptions", run(args.batches, args.mappings, args.output, receipt_applications=args.receipt_applications))
         else:
             initial = Path("fixtures/01_initial")
             followup = Path("fixtures/02_followup")

@@ -37,7 +37,19 @@ python3 evaluation/score_holdout.py
 
 The updated engine sends the second $138 entry (O02) to review and links it to the first import (O01). Both distinct $184 invoices (C01 and C02) still pass. The regression test checks all 17 original decisions and their amounts. The scorecard above records the first, frozen run. [Regression tests](tests/test_duplicate_invoices.py)
 
-After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. If two legitimate identical lines on one document have the same signature, the feed needs a stable supplier line identifier to distinguish them.
+After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. A complete voucher-to-receipt application extract can resolve a repeat as a split delivery.
+
+### Clearing a split delivery
+
+Supply an optional application snapshot with the columns `vendor_id,invoice_event_id,voucher_id,voucher_line,invoice,receipt_event_id,applied_eaches,applied_cents`. Each row links one voucher line to an accepted shipment. Use stable receipt event IDs at shipment grain and voucher IDs scoped to the source business unit. Quantities are in eaches and amounts in integer USD cents. The application snapshot must cover all claims against the shipments in scope.
+
+```sh
+python3 -m purchasing path/to/batch --mappings path/to/mappings --receipt-applications path/to/applications.csv --output build/review
+```
+
+The repeated lines must have the same source invoice number and voucher, distinct voucher lines and disjoint shipments. The engine checks the quantities and amounts for every billed line on that PO line, verifies that the order covers the billed quantities and checks the total claimed against each shipment. A third line can share a shipment if every claim reconciles to the accepted quantity or less. An incomplete crosswalk, conflicting receipt, overlapping shipments within the repeat group, or an overdraw leaves the duplicate hold in place.
+
+Identity is resolved using the supplied snapshot. Receipt coverage still uses the invoice date. If the assigned second shipment arrived later, the retroactive identity check clears the duplicate hold and reports the original shortfall. The SQLite table `verified_receipt_applications` traces the result to the voucher line, shipment, applied units and cents. The row audit records the decision. [Synthetic split-delivery and ambiguity tests](tests/test_split_deliveries.py)
 
 ## Follow one box into a surgical case
 

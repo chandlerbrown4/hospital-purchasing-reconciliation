@@ -1,6 +1,7 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 
+from .applications import Application, apply_split_evidence
 from .inputs import Event, SourceRow
 
 
@@ -9,6 +10,8 @@ class InvoiceLine:
     source: SourceRow
     po: Event | None = None
     first_entry: str | None = None
+    split_confirmed: bool = False
+    allocations: tuple[Application, ...] = ()
     delivered_eaches: int | None = None
     cumulative_billed_eaches: int | None = None
     covered_eaches: int | None = None
@@ -142,7 +145,7 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     if line.expected_cents is not None:
         line.delta_cents = invoice.amount_cents - line.expected_cents
 
-    if line.first_entry != invoice.event_id:
+    if line.first_entry != invoice.event_id and not line.split_confirmed:
         row.decision = "possible_duplicate_invoice"
         row.reason = (f"same vendor invoice, PO line, date, quantity and amount as active event {line.first_entry}; "
                       "hold this entry pending document review")
@@ -156,10 +159,15 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     else:
         line.delivered_eaches = sum(receipt.eaches for receipt in confirmed)
         available = max(0, min(po.eaches, line.delivered_eaches) - prior_billed)
+        if line.allocations:
+            on_time = {r.event_id for r in confirmed}
+            available = sum(a.eaches for a in line.allocations if a.receipt in on_time)
         line.covered_eaches = min(invoice.eaches, available)
         line.unbacked_eaches = invoice.eaches - line.covered_eaches
         line.unbacked_po_cents = exact_cents(po.amount_cents * line.unbacked_eaches, po.eaches)
-        if line.cumulative_billed_eaches > line.delivered_eaches:
+        if line.allocations and line.unbacked_eaches:
+            flags.append(("insufficient_receipts", "assigned shipment quantity was not received in full by invoice date"))
+        elif not line.allocations and line.cumulative_billed_eaches > line.delivered_eaches:
             flags.append(("insufficient_receipts", "cumulative billed eaches exceed receipts on the invoice date"))
         if line.unbacked_po_cents is None:
             flags.append(("fractional_exposure_cent", "PO rate produces fractional cents for unbacked units"))
@@ -178,8 +186,14 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
         row.decision = "matched"
         row.reason = "invoice quantity covered by PO and receipts and charge matches PO rate"
 
+    if line.allocations:
+        a = line.allocations[0]
+        links = ", ".join(sorted(record.receipt for record in line.allocations))
+        basis = "distinct split deliveries confirmed" if line.split_confirmed else "receipt applications verified"
+        row.reason += f"; {basis} in snapshot for voucher {a.voucher} line {a.voucher_line}, shipments: {links}"
 
-def reconcile(rows):
+
+def reconcile(rows, applications=None):
     active = active_ledger(rows)
     orders = defaultdict(list)
     line_counts = Counter()
@@ -222,6 +236,7 @@ def reconcile(rows):
             signature = (line.po.key, event.invoice, event.date, event.eaches, event.amount_cents)
             line.first_entry = first_entries.setdefault(signature, event.event_id)
 
+    apply_split_evidence(invoices, receipts, uncertain, applications)
     billed = defaultdict(int)
     for line in sorted(invoices, key=lambda line: (line.source.event.date, line.source.event.key)):
         if line.po:

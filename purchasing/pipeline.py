@@ -6,6 +6,7 @@ from dataclasses import asdict
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from .applications import load_applications
 from .inputs import load
 from .reconcile import price_book, reconcile
 
@@ -64,6 +65,17 @@ CREATE TABLE invoice_lines (
     delta_cents INTEGER,
     decision TEXT NOT NULL
 );
+
+CREATE TABLE verified_receipt_applications (
+    invoice_audit_id INTEGER NOT NULL REFERENCES invoice_lines(audit_id),
+    voucher_id TEXT NOT NULL,
+    voucher_line TEXT NOT NULL,
+    receipt_event_id TEXT NOT NULL,
+    applied_eaches INTEGER NOT NULL,
+    applied_cents INTEGER NOT NULL,
+    split_confirmed INTEGER NOT NULL,
+    PRIMARY KEY (invoice_audit_id, receipt_event_id)
+);
 """
 
 
@@ -103,9 +115,10 @@ def invoice_record(audit_id, line):
     )
 
 
-def run(batches, mappings, output):
+def run(batches, mappings, output, *, receipt_applications=None):
     rows = load(batches, mappings)
-    lines = reconcile(rows)
+    applications = load_applications(receipt_applications) if receipt_applications is not None else None
+    lines = reconcile(rows, applications)
     prices, price_evidence = price_book(lines)
     audit = [audit_record(audit_id, row) for audit_id, row in enumerate(rows, start=1)]
     audit_ids = {id(row): audit_id for audit_id, row in enumerate(rows, start=1)}
@@ -123,6 +136,12 @@ def run(batches, mappings, output):
                 conn.executemany(
                     "INSERT INTO invoice_lines VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     invoice_records,
+                )
+                conn.executemany(
+                    "INSERT INTO verified_receipt_applications VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    ((audit_ids[id(line.source)], a.voucher, a.voucher_line, a.receipt, a.eaches, a.cents,
+                      line.split_confirmed) for line in lines if line.cumulative_billed_eaches is not None
+                     for a in line.allocations),
                 )
             cursor = conn.execute(sql)
             headers = [column[0] for column in cursor.description]
