@@ -1,6 +1,53 @@
 # Hospital Purchasing Reconciliation
 
-A reproducible three-way match for hospital purchase orders, deliveries, and invoices. The demo and the held-out evaluation use fictional transactions and vendor mappings.
+## Which invoices should accounts payable review first?
+
+This Python and SQLite demo matches fictional purchase orders, receipts, and invoices. Three examples from the evaluation batch show what an accounts payable analyst can do with the current results.
+
+| Finding | Evidence | AP decision |
+| --- | --- | --- |
+| Possible duplicate payment · $138 | O01 and O02 entered the same supplier document as `bg402` and `BG402`. The PO and receipt had enough units to cover both entries. | Hold the second entry and verify it against the supplier document. |
+| Price and quantity discrepancy · M06 | The supplier billed 200 drives at $10.80 against a $10.00 PO price, a **$160 price difference**. Earlier invoices had used 900 of 1,000 delivered units, leaving **100 units without coverage**, worth $1,000 at the PO rate. | Dispute the price difference and check receiving records for the 100 units. |
+| Two legitimate $184 invoices | C01 and C02 have different invoice numbers and separate deliveries of four lamps each. | Accept both through the three-way match. |
+
+**The original held-out run scored 16/17.** It accepted the second $138 entry. After the fix, the current engine matches the decisions and amounts on **17/17 of those same lines** in regression testing. [Frozen scorecard](#held-out-purchasing-scorecard) · [Source invoices](evaluation/held-out-v1/batch/invoices.csv) · [Regression tests](tests/test_duplicate_invoices.py)
+
+<details>
+<summary>Reproduce the AP table with SQL</summary>
+
+Run the current engine on the evaluation batch from this repository, then query the five invoice lines behind the three decisions. Monetary columns are in USD cents. SQL <code>NULL</code> means the amount or quantity is unresolved.
+
+```sh
+python3 -m purchasing evaluation/held-out-v1/batch --mappings evaluation/held-out-v1 --output build/ap-review
+sqlite3 -header -column build/ap-review/reconciliation.sqlite <<'SQL'
+SELECT event_id, invoice, actual_cents, decision,
+       delta_cents, unbacked_eaches, unbacked_po_cents
+FROM invoice_lines
+WHERE event_id IN ('O01', 'O02', 'M06', 'C01', 'C02')
+ORDER BY event_id;
+SQL
+```
+
+</details>
+
+## Follow one box into a surgical case
+
+PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. The reconciler checks the receipt, converts the box price to cents per implant and exports a dated catalog row. The surgical project uses that catalog row on the surgery date. [See the price change from the surgical side](https://github.com/chandlerbrown4/surgical-case-outcomes#follow-a-purchase-price-into-the-operating-room)
+
+| Synthetic record | Original | After the source price change |
+| --- | ---: | ---: |
+| PO-100, six implants per box | $720.00 | $726.00 |
+| INV-380, invoice price per implant | $120.00 | $121.00 |
+| Exported MESH-A rate in cents per implant | 12,000 | 12,100 |
+| Surgical case S001, one MESH-A plus fixation and other case costs | $4,304.50 | $4,305.50 |
+
+The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
+
+With both repositories checked out side by side, run the walkthrough from the purchasing repository.
+
+```sh
+python3 ../surgical-case-outcomes/examples/check_purchasing_handoff.py --purchasing .
+```
 
 ## Held-out purchasing scorecard
 
@@ -21,9 +68,7 @@ Exact results by origin were 8/9 for externally sourced cases and 8/8 for local 
 Unexpected output lines: 0. Correctly routed lines with wrong amounts: 0.
 <!-- held-out-v1:end -->
 
-- **Correct discrepancy.** On the final drive invoice (M06), the vendor billed 200 at $10.80 against a $10 order. Earlier invoices had consumed 900 of the 1,000 delivered drives. The engine reported a $160 price difference and separately identified 100 units without remaining coverage, worth $1,000 at the PO rate.
-- **Correct review.** C05 could refer to either of two PO lines, priced at $44 and $46. C06 had a single receipt reference reporting both four and six lamps. The engine withheld the unresolved quantities for both, while retaining the known $0 price difference on C06.
-- **Wrongly accepted as clean.** O01 and O02 represent one $138 supplier invoice entered as `bg402` and `BG402` under different import IDs. The 12 received lamps covered both three-lamp entries, so the engine accepted both. This exposes $138 to possible duplicate payment. In the control pair C01/C02, two distinct $184 invoices and deliveries were correctly accepted.
+Two other lines show why amounts can remain unknown. C05 could refer to either of two PO lines priced at $44 and $46. C06 has a single receipt reference reporting both four and six lamps. The engine withheld the unresolved quantities for both and retained the known $0 price difference on C06.
 
 The line-level scorecard includes the expected and actual decision, price difference, unbacked quantity and dollar exposure. Each result names the PO and receipts used by the engine. [Score all 17 lines](evaluation/held-out-v1/results.csv) · [Inspect the source invoices](evaluation/held-out-v1/batch/invoices.csv) · [Read the locked answer key](evaluation/held-out-v1/expected.csv)
 
@@ -33,9 +78,7 @@ To reproduce the score from a full Git clone, run the command below. It runs the
 python3 evaluation/score_holdout.py
 ```
 
-## Duplicate-invoice regression
-
-The updated engine sends the second $138 entry (O02) to review and links it to the first import (O01). Both distinct $184 invoices (C01 and C02) still pass. The regression test checks all 17 original decisions and their amounts. The scorecard above records the first, frozen run. [Regression tests](tests/test_duplicate_invoices.py)
+## How the duplicate check works
 
 After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. A complete voucher-to-receipt application extract can resolve a repeat as a split delivery.
 
@@ -52,25 +95,6 @@ The repeated lines must share a source invoice number and voucher and have disti
 For lines dividing a single shipment, include the optional `billed_eaches` column from the voucher application source. Each line’s independently reported billed quantity must agree with its invoice line. Applied quantities and cents must reconcile line by line, and the repeated lines together must account for the entire accepted shipment. Missing or contradictory evidence keeps the duplicate hold. Partial overlap across multiple shipments also stays in review. A merchandise match can coexist with a separate ledger discrepancy.
 
 Identity is resolved using the supplied snapshot. Receipt coverage still uses the invoice date. If the assigned second shipment arrived later, the retroactive identity check clears the duplicate hold and reports the original shortfall. The SQLite table `verified_receipt_applications` traces the result to the voucher line, shipment, applied units and cents. The row audit records the decision. [Synthetic split-delivery and ambiguity tests](tests/test_split_deliveries.py)
-
-## Follow one box into a surgical case
-
-PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. The reconciler checks the receipt, converts the box price to cents per implant and exports a dated catalog row. The companion `surgical-case-outcomes` project uses that row to price the quantity implanted on each surgery date.
-
-| Synthetic record | Original | After the source price change |
-| --- | ---: | ---: |
-| PO-100, six implants per box | $720.00 | $726.00 |
-| INV-380, invoice price per implant | $120.00 | $121.00 |
-| Exported MESH-A rate in cents per implant | 12,000 | 12,100 |
-| Surgical case S001, one MESH-A plus fixation and other case costs | $4,304.50 | $4,305.50 |
-
-The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
-
-With both repositories checked out side by side, run this from the purchasing repository:
-
-```sh
-python3 ../surgical-case-outcomes/examples/check_purchasing_handoff.py --purchasing .
-```
 
 ## What the demo finds
 
