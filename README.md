@@ -43,7 +43,7 @@ PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. 
 
 The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
 
-GitHub Actions ran the walkthrough from fresh checkouts of both repositories. [See the case-by-case verification in the job log](https://github.com/chandlerbrown4/surgical-case-outcomes/actions/runs/45445859485/job/138629333952)
+GitHub Actions ran the walkthrough from fresh checkouts of both repositories. [View the verified walkthrough](https://github.com/chandlerbrown4/surgical-case-outcomes/actions/runs/45445859485/job/138629333952)
 
 With both repositories checked out side by side, run the walkthrough from the purchasing repository.
 
