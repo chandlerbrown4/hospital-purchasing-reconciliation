@@ -12,6 +12,8 @@ This Python and SQLite demo matches fictional purchase orders, receipts, and inv
 
 **The original held-out run scored 16/17.** It accepted the second $138 entry. After the fix, the current engine matches the decisions and amounts on **17/17 of those same lines** in regression testing. [Frozen scorecard](#held-out-purchasing-scorecard) · [Source invoices](evaluation/held-out-v1/batch/invoices.csv) · [Regression tests](tests/test_duplicate_invoices.py)
 
+The current AP summary accounts for all 17 source invoice rows in this batch. Six matched, eight have a discrepancy, and three need review. The summary counts source rows, so two entries for the same supplier document remain visible.
+
 <details>
 <summary>Reproduce the AP table with SQL</summary>
 
@@ -41,7 +43,7 @@ PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. 
 | Exported MESH-A rate in cents per implant | 12,000 | 12,100 |
 | Surgical case S001, one MESH-A plus fixation and other case costs | $4,304.50 | $4,305.50 |
 
-The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
+The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](examples/outputs/device_price_evidence.csv)
 
 GitHub Actions ran the walkthrough from fresh checkouts of both repositories. [View the verified walkthrough](https://github.com/chandlerbrown4/surgical-case-outcomes/actions/runs/45445859485/job/138629333952)
 
@@ -125,14 +127,19 @@ python3 -m purchasing fixtures/01_initial fixtures/02_followup --output build
 
 ## Review the evidence
 
-- [Invoice differences](build/invoice_differences.csv) groups active exceptions by vendor and invoice. Positive price variance means the vendor charged more than the PO rate for the billed quantity. Quantity exposure values incremental unbacked units at the PO rate. The unknown-line counts indicate where totals are partial or blank.
-- [Row audit](build/row_audit.csv) records every ingested source row, including replays, retired events, and quarantined candidates. Each row includes the input file and line, source fields under canonical column names, a reason, and applicable PO and receipt identities. Use vendor, feed, and event ID together to locate receipt evidence.
-- The local SQLite snapshot `build/reconciliation.sqlite` contains the audit and active invoice lines. The invoice lines join to the audit on `audit_id`. Run the [invoice differences query](purchasing/invoice_differences.sql) against the snapshot to regenerate the exception report.
-- [Device prices](build/device_prices.csv) exports USD cents per each. The demo publishes MESH-A at 12,000 cents, MESH-B at 17,500 cents, and FIX-1 at 2,100 cents through June 30, 2025 and 2,400 cents starting July 1. The [price evidence](build/device_price_evidence.csv) traces each published rate back to its PO, invoice, and source row. See the [shared CSV contract](docs/device-prices.md).
+- The [AP summary](examples/outputs/ap_summary.csv) counts every invoice source row once. The [invoice register](examples/outputs/ap_invoice_rows.csv) gives each row a source location, decision, reason, and available amounts. **Matched** rows pass reconciliation. **Exception** rows have a confirmed discrepancy. **Review** rows need evidence. **Rejected** rows need a source correction. **History** records replays, retired entries, and applied reversals. History stays out of payable totals.
+- [Invoice differences](examples/outputs/invoice_differences.csv) groups active exceptions by vendor and invoice. Positive price variance means the vendor charged more than the PO rate for the billed quantity. Quantity exposure values incremental unbacked units at the PO rate. The unknown-line counts indicate where totals are partial or blank.
+- [Row audit](examples/outputs/row_audit.csv) records every ingested source row, including replays, retired events, and quarantined candidates. Each row includes the input file and line, source fields under canonical column names, a reason, and applicable PO and receipt identities. Use vendor, feed, and event ID together to locate receipt evidence.
+- The local SQLite snapshot `build/reconciliation.sqlite` contains the two AP views, the audit, active invoice lines, price catalog, and price evidence. Each CSV is exported from the SQLite table or view of the same name. The invoice lines join to the audit on `audit_id`. Run the [invoice differences query](purchasing/invoice_differences.sql) against the snapshot to regenerate the exception report.
+- [Device prices](examples/outputs/device_prices.csv) exports USD cents per each. The demo publishes MESH-A at 12,000 cents, MESH-B at 17,500 cents, and FIX-1 at 2,100 cents through June 30, 2025 and 2,400 cents starting July 1. The [price evidence](examples/outputs/device_price_evidence.csv) traces each published rate back to its PO, invoice, and source row. See the [shared CSV contract](docs/device-prices.md).
 
 ```sh
 sqlite3 -csv -header build/reconciliation.sqlite < purchasing/invoice_differences.sql
 ```
+
+Each successful build closes the SQLite database and finishes all six CSVs before switching one directory pointer. The familiar filenames under `build/` all resolve through that pointer. If the process stops before the switch, AP sees the previous complete snapshot. After the switch, AP sees the complete new one. This requires a filesystem that supports symbolic links and atomic rename. The before and after demo outputs are each a separate snapshot.
+
+For a multi-file read during a rebuild, use the directory printed with the invoice register, or resolve `build/.purchasing/current` once and open every file there. Prior generations remain available for readers and accumulate under `.purchasing/`. A file-level error such as an unsupported currency or unreadable schema fails the batch before publication. A readable invoice with an invalid quantity appears as rejected with its original source value in the reason.
 
 The loader resolves header aliases and validates each feed's schema, including empty feeds. Vendor aliases and pack sizes come from explicit mappings. An optional currency column on POs or invoices must use USD. Events with the same feed, canonical vendor, ID, and normalized business payload are replays. A replacement or reversal targets an earlier active receipt or invoice in ingestion order. Competing revisions and conflicting payloads quarantine the affected chain regardless of branch order.
 
