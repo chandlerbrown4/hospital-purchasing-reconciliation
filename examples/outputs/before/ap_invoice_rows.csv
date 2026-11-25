@@ -1,0 +1,4 @@
+audit_id,batch,source_file,source_line,vendor,invoice,event_id,disposition,decision,reason,target_event_id,actual_cents,delta_cents,unbacked_eaches,unbacked_po_cents
+9,1,fixtures/01_initial/invoices.csv,2,STERILE,INV-380,I-A1,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,72000,0,0,0
+10,1,fixtures/01_initial/invoices.csv,3,HORIZON,INV-480,I-B0,exception,price_variance,actual invoice charge differs from the PO rate,,80000,10000,0,0
+11,1,fixtures/01_initial/invoices.csv,4,HORIZON,INV-510,I-F1,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,21000,0,0,0

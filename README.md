@@ -1,28 +1,39 @@
 # Hospital Purchasing Reconciliation
 
-## Which invoices should accounts payable review first?
+An accounts payable analyst receives seven invoice rows. Two $138 entries have enough purchase order and receipt coverage to pass a three-way match, but they carry the same supplier invoice number and their dates differ by one day. The Python and SQLite pipeline holds the second entry and accounts for every row in the file.
 
-This Python and SQLite demo matches fictional purchase orders, receipts, and invoices. Three examples from the evaluation batch show what an accounts payable analyst can do with the current results.
+| AP decision | Evidence from the synthetic batch |
+| --- | --- |
+| Match 3 rows | The original $138 invoice matches. Two $184 invoices also match because their supplier document numbers differ and each has a delivery of four lamps. |
+| Hold 1 for review | The March 4 entry for `BG402` matches the March 3 entry for `bg402` on vendor, PO line, quantity and amount. The register links both event IDs so AP can check the source document. |
+| Flag 1 price discrepancy | Birch billed $13 for four gloves. The purchase order calls for $14, so the signed price difference is **−$1**. |
+| Reject 1 and retain 1 as history | One invoice gives its quantity as `three`. Another row repeats an already recorded event. Both retain a source line and a reason. |
 
-| Finding | Evidence | AP decision |
-| --- | --- | --- |
-| Possible duplicate payment · $138 | O01 and O02 entered the same supplier document as `bg402` and `BG402`. The PO and receipt had enough units to cover both entries. | Hold the second entry and verify it against the supplier document. |
-| Price and quantity discrepancy · M06 | The supplier billed 200 drives at $10.80 against a $10.00 PO price, a **$160 price difference**. Earlier invoices had used 900 of 1,000 delivered units, leaving **100 units without coverage**, worth $1,000 at the PO rate. | Dispute the price difference and check receiving records for the 100 units. |
-| Two legitimate $184 invoices | C01 and C02 have different invoice numbers and separate deliveries of four lamps each. | Accept both through the three-way match. |
+**Inspect the seven rows on GitHub.** [Invoice input](examples/ap-review/batch/invoices.csv) · [Purchase orders](examples/ap-review/batch/po_lines.csv) · [Receipts](examples/ap-review/batch/receipts.csv) · [AP register](examples/ap-review/ap_invoice_rows.csv) · [Control totals](examples/ap-review/ap_summary.csv)
 
-**The original held-out run scored 16/17.** It accepted the second $138 entry. After the fix, the current engine matches the decisions and amounts on **17/17 of those same lines** in regression testing. [Frozen scorecard](#held-out-purchasing-scorecard) · [Source invoices](evaluation/held-out-v1/batch/invoices.csv) · [Regression tests](tests/test_duplicate_invoices.py)
+Reproduce this batch from the repository root with Python 3.11 or newer.
+
+```sh
+python3 -m purchasing examples/ap-review/batch --mappings evaluation/held-out-v1 --output build/ap-review-day
+```
+
+### How the engine performed on a frozen evaluation
+
+The first held-out run matched **16 of 17** invoice lines on both decisions and amounts. It accepted the second $138 entry of a same-day pair. The current engine matches the answer key on **17 of those same 17 lines** in regression testing. The one-day variation above exercises the wider date rule separately. [Original scorecard](#held-out-purchasing-scorecard) · [Current 17-line AP register](examples/ap-review/original-batch/ap_invoice_rows.csv) · [Current control totals](examples/ap-review/original-batch/ap_summary.csv)
+
+The evaluation also contains a discrepancy with two different financial implications. For M06, the supplier billed 200 drives at $10.80 against a $10.00 PO price, a **$160 price difference**. Earlier invoices had consumed 900 of the 1,000 delivered units. That leaves **100 units without receipt coverage**, valued at **$1,000** at the PO rate. AP can dispute the unit price and independently check the missing delivery. [Evaluation invoices](evaluation/held-out-v1/batch/invoices.csv) · [Routing and amount tests](tests/test_duplicate_invoices.py)
 
 <details>
-<summary>Reproduce the AP table with SQL</summary>
+<summary>Query the five evaluation lines behind the duplicate, coverage and clean decisions</summary>
 
-Run the current engine on the evaluation batch from this repository, then query the five invoice lines behind the three decisions. Monetary columns are in USD cents. SQL <code>NULL</code> means the amount or quantity is unresolved.
+Run the evaluation batch, then query the AP register. Amounts are in USD cents. SQL <code>NULL</code> means the corresponding value is unresolved.
 
 ```sh
 python3 -m purchasing evaluation/held-out-v1/batch --mappings evaluation/held-out-v1 --output build/ap-review
 sqlite3 -header -column build/ap-review/reconciliation.sqlite <<'SQL'
-SELECT event_id, invoice, actual_cents, decision,
+SELECT event_id, invoice, actual_cents, disposition,
        delta_cents, unbacked_eaches, unbacked_po_cents
-FROM invoice_lines
+FROM ap_invoice_rows
 WHERE event_id IN ('O01', 'O02', 'M06', 'C01', 'C02')
 ORDER BY event_id;
 SQL
@@ -41,7 +52,7 @@ PO-100 orders MESH-A by the box. Invoice INV-380 bills six individual implants. 
 | Exported MESH-A rate in cents per implant | 12,000 | 12,100 |
 | Surgical case S001, one MESH-A plus fixation and other case costs | $4,304.50 | $4,305.50 |
 
-The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](build/device_price_evidence.csv)
+The original export traces MESH-A to PO event `P-A` and invoice event `I-A1`. The walkthrough changes the PO, its replay in the second batch, and the invoice in a temporary copy. It reruns both pipelines and verifies that **55 of 113 case totals increase by $1**. [Original purchase order](fixtures/01_initial/po_lines.csv) · [Invoice](fixtures/01_initial/invoices.csv) · [Exported price evidence](examples/outputs/device_price_evidence.csv)
 
 GitHub Actions ran the walkthrough from fresh checkouts of both repositories. [View the verified walkthrough](https://github.com/chandlerbrown4/surgical-case-outcomes/actions/runs/45445859485/job/138629333952)
 
@@ -82,7 +93,11 @@ python3 evaluation/score_holdout.py
 
 ## How the duplicate check works
 
-After reversals and replacements, the engine compares active entries using the normalized supplier invoice number, resolved vendor and PO line, invoice date, quantity in eaches, and total merchandise charge. The first surviving import retains its normal reconciliation decision. A later identical signature has its own audit row and a known price difference when calculable. Its quantity exposure stays unknown pending review, and it contributes neither a second price variance to the invoice total nor a catalog price. Distinct invoice numbers remain separate. A complete voucher-to-receipt application extract can resolve a repeat as a split delivery.
+After reversals and replacements, the engine compares entries with the same normalized supplier invoice number, resolved vendor and PO line, quantity in eaches, and total merchandise charge. It checks the invoice date against earlier surviving originals. A date on the same calendar day, one day earlier, or one day later triggers review. A held copy cannot extend that window. The AP register gives the dates and event IDs so an analyst can find both entries.
+
+For example, moving the second $138 entry from March 3 to March 4 still holds O02 against O01. Moving the second $184 invoice to March 4 still clears both B-801 and B-802 because their supplier invoice numbers differ and both deliveries cover the bills. These date variations are regression cases. [Date-window tests](tests/test_duplicate_invoices.py)
+
+The original retains its normal decision. The held row keeps its own audit record and any known price difference. Its quantity exposure remains unknown pending review. It consumes no receipt coverage, adds no second price variance to the invoice total, and supplies no catalog price. A complete voucher-to-receipt application extract can resolve the repeat as a split delivery.
 
 ### Clearing a split delivery
 
@@ -125,14 +140,30 @@ python3 -m purchasing fixtures/01_initial fixtures/02_followup --output build
 
 ## Review the evidence
 
-- [Invoice differences](build/invoice_differences.csv) groups active exceptions by vendor and invoice. Positive price variance means the vendor charged more than the PO rate for the billed quantity. Quantity exposure values incremental unbacked units at the PO rate. The unknown-line counts indicate where totals are partial or blank.
-- [Row audit](build/row_audit.csv) records every ingested source row, including replays, retired events, and quarantined candidates. Each row includes the input file and line, source fields under canonical column names, a reason, and applicable PO and receipt identities. Use vendor, feed, and event ID together to locate receipt evidence.
-- The local SQLite snapshot `build/reconciliation.sqlite` contains the audit and active invoice lines. The invoice lines join to the audit on `audit_id`. Run the [invoice differences query](purchasing/invoice_differences.sql) against the snapshot to regenerate the exception report.
-- [Device prices](build/device_prices.csv) exports USD cents per each. The demo publishes MESH-A at 12,000 cents, MESH-B at 17,500 cents, and FIX-1 at 2,100 cents through June 30, 2025 and 2,400 cents starting July 1. The [price evidence](build/device_price_evidence.csv) traces each published rate back to its PO, invoice, and source row. See the [shared CSV contract](docs/device-prices.md).
+- The [AP summary](examples/outputs/ap_summary.csv) counts every invoice source row once. The [invoice register](examples/outputs/ap_invoice_rows.csv) gives each row a source location, decision, reason, and available amounts. **Matched** rows pass reconciliation. **Exception** rows have a confirmed discrepancy. **Review** rows need evidence. **Rejected** rows need a source correction. **History** records replays, retired entries, and applied reversals. History stays out of payable totals.
+- [Invoice differences](examples/outputs/invoice_differences.csv) groups active exceptions by vendor and invoice. Positive price variance means the vendor charged more than the PO rate for the billed quantity. Quantity exposure values incremental unbacked units at the PO rate. The unknown-line counts indicate where totals are partial or blank.
+- [Row audit](examples/outputs/row_audit.csv) records every ingested source row, including replays, retired events, and quarantined candidates. Each row includes the input file and line, source fields under canonical column names, a reason, and applicable PO and receipt identities. Use vendor, feed, and event ID together to locate receipt evidence.
+- The local SQLite snapshot `build/reconciliation.sqlite` contains the two AP views, the audit, active invoice lines, price catalog, and price evidence. Each CSV is exported from the SQLite table or view of the same name. The invoice lines join to the audit on `audit_id`. Run the [invoice differences query](purchasing/invoice_differences.sql) against the snapshot to regenerate the exception report.
+- [Device prices](examples/outputs/device_prices.csv) exports USD cents per each. The demo publishes MESH-A at 12,000 cents, MESH-B at 17,500 cents, and FIX-1 at 2,100 cents through June 30, 2025 and 2,400 cents starting July 1. The [price evidence](examples/outputs/device_price_evidence.csv) traces each published rate back to its PO, invoice, and source row. See the [shared CSV contract](docs/device-prices.md).
 
 ```sh
 sqlite3 -csv -header build/reconciliation.sqlite < purchasing/invoice_differences.sql
 ```
+
+Each successful build closes the SQLite database and finishes all six CSVs before switching one directory pointer. The familiar filenames under `build/` all resolve through that pointer. If the process stops before the switch, AP sees the previous complete snapshot. After the switch, AP sees the complete new one. This requires a filesystem that supports symbolic links and atomic rename. The before and after demo outputs are each a separate snapshot.
+
+Upgrading an earlier checkout? Run `python3 -m purchasing` once after pulling to create the new live paths under `build/`. [Checked-in example outputs](examples/outputs/) are available immediately.
+
+For a multi-file read during a rebuild, use the directory printed with the invoice register, or resolve `build/.purchasing/current` once and open every file there. Prior generations remain available for readers and accumulate under `.purchasing/`. A file-level error such as an unsupported currency or unreadable schema fails the batch before publication. A readable invoice with an invalid quantity appears as rejected with its original source value in the reason.
+
+**Reproduce a stopped batch.** Run `python3 -m examples.recovery_benchmark` on macOS or Linux. The harness kills a worker just before publication, reads the previous snapshot, retries the batch and compares all six CSVs and the SQLite database byte-for-byte against a fresh build. Its synthetic workload uses one invoice and two partial deliveries per order, with additional replays and deliberate price differences.
+
+| Generated input | Verified dispositions | Observed retry |
+| --- | --- | --- |
+| 10,000 orders · 40,500 source rows | 9,000 matched · 1,000 price exceptions totaling $1,000 · 500 replayed invoices | 1.46 s · maximum worker RSS 135.8 MiB |
+
+One local run on macOS arm64 with Python 3.12.0 produced those timings. The seven-file comparison and expected accounting totals run on every invocation. The interruption simulates process termination on a local filesystem. [Benchmark code](examples/recovery_benchmark.py)
+
 
 The loader resolves header aliases and validates each feed's schema, including empty feeds. Vendor aliases and pack sizes come from explicit mappings. An optional currency column on POs or invoices must use USD. Events with the same feed, canonical vendor, ID, and normalized business payload are replays. A replacement or reversal targets an earlier active receipt or invoice in ingestion order. Competing revisions and conflicting payloads quarantine the affected chain regardless of branch order.
 

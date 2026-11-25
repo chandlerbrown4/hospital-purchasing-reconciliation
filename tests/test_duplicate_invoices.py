@@ -11,6 +11,34 @@ from purchasing.pipeline import run
 
 
 class DuplicateInvoiceTests(unittest.TestCase):
+    def test_one_day_window_keeps_the_first_import_and_separate_supplier_documents(self):
+        fixture = ROOT / FIXTURE
+        with TemporaryDirectory() as folder:
+            tmp = Path(folder)
+            batch = Path(shutil.copytree(fixture / "batch", tmp / "batch"))
+            original = {r["event_id"]: r for r in read_csv(batch / "invoices.csv")}
+            for second_date, expected in (("2025-03-30", "review"), ("2025-03-31", "review"),
+                                          ("2025-04-01", "review"), ("2025-04-02", "matched")):
+                with self.subTest(second_date=second_date):
+                    # C01/C02 have equal amounts on the same PO line and different invoice numbers.
+                    data = [dict(original["O01"], date="2025-03-31"), dict(original["O02"], date=second_date),
+                            original["C01"], dict(original["C02"], date="2025-03-04")]
+                    with (batch / "invoices.csv").open("w", newline="") as sink:
+                        writer = csv.DictWriter(sink, data[0])
+                        writer.writeheader()
+                        writer.writerows(data)
+                    out = tmp / "out"
+                    run([batch], fixture, out)
+                    ap = {r["event_id"]: r for r in read_csv(out / "ap_invoice_rows.csv")}
+                    self.assertEqual([ap[k]["disposition"] for k in ("O01", "O02", "C01", "C02")],
+                                     ["matched", expected, "matched", "matched"])
+                    evidence = {r["invoice_event_id"] for r in read_csv(out / "device_price_evidence.csv")}
+                    self.assertEqual("O02" in evidence, expected == "matched")
+                    if expected == "review":
+                        self.assertIn("O01 (2025-03-31)", ap["O02"]["reason"])
+                        self.assertIn(second_date, ap["O02"]["reason"])
+                        self.assertEqual((ap["O02"]["actual_cents"], ap["O02"]["unbacked_eaches"]), ("13800", ""))
+
     def test_current_engine_on_every_original_scorecard_line(self):
         fixture = ROOT / FIXTURE
         with TemporaryDirectory() as folder:

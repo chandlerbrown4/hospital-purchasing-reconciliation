@@ -72,6 +72,26 @@ def validate_order_line(lines, receipts, applications, claimants, owners):
                for rid, qty in used.items())
 
 
+def duplicate_families(lines):
+    """Verify all plausible originals together when a date falls between two of them."""
+    by_id = {line.source.event.event_id: line for line in lines}
+    neighbors = defaultdict(list)
+    for event_id, line in by_id.items():
+        for original in line.duplicate_candidates:
+            neighbors[event_id].append(original.event_id)
+            neighbors[original.event_id].append(event_id)
+
+    while neighbors:
+        pending = [next(iter(neighbors))]
+        family = []
+        while pending:
+            event_id = pending.pop()
+            if event_id in neighbors:
+                family.append(by_id[event_id])
+                pending.extend(neighbors.pop(event_id))
+        yield family
+
+
 def apply_split_evidence(invoices, receipts, uncertain, applications):
     if not applications:
         return
@@ -97,10 +117,7 @@ def apply_split_evidence(invoices, receipts, uncertain, applications):
 
     for key, lines in by_order_line.items():
         po = lines[0].po
-        families = defaultdict(list)
-        for line in lines:
-            families[line.first_entry].append(line)
-        repeats = [family for family in families.values() if len(family) > 1]
+        repeats = list(duplicate_families(lines))
         if (not repeats or uncertain[key] or (po.vendor, po.po, po.po_line) in unresolved_lines
                 or (po.vendor, po.po, po.sku) in unresolved_items):
             continue

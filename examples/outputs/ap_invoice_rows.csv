@@ -1,0 +1,12 @@
+audit_id,batch,source_file,source_line,vendor,invoice,event_id,disposition,decision,reason,target_event_id,actual_cents,delta_cents,unbacked_eaches,unbacked_po_cents
+9,1,fixtures/01_initial/invoices.csv,2,STERILE,INV-380,I-A1,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,72000,0,0,0
+10,1,fixtures/01_initial/invoices.csv,3,HORIZON,INV-480,I-B0,history,reversed,reverse event I-B0-V retired this record,,,,,
+11,1,fixtures/01_initial/invoices.csv,4,HORIZON,INV-510,I-F1,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,21000,0,0,0
+24,2,fixtures/02_followup/invoices.csv,2,STERILE,INV-391,I-A2,exception,price_variance,actual invoice charge differs from the PO rate,,75000,3000,0,0
+25,2,fixtures/02_followup/invoices.csv,3,HORIZON,,I-B0-V,history,reversal_applied,retired I-B0,I-B0,,,,
+26,2,fixtures/02_followup/invoices.csv,4,HORIZON,INV-481,I-B1,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,70000,0,0,0
+27,2,fixtures/02_followup/invoices.csv,5,HORIZON,INV-499,I-X,review,ambiguous_po_line,"candidate PO events: P-X1, P-X2",,17500,,,
+28,2,fixtures/02_followup/invoices.csv,6,HORIZON,INV-519,I-F2,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,48000,0,0,0
+29,2,fixtures/02_followup/invoices.csv,7,HORIZON,INV-610,I-S1,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date,,100000,0,20,20000
+30,2,fixtures/02_followup/invoices.csv,8,HORIZON,INV-611,I-S2,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date,,10000,0,10,10000
+31,2,fixtures/02_followup/invoices.csv,9,HORIZON,INV-620,I-Q,review,uncertain_receipts,quantity coverage requires review of conflicting or ambiguous receipt evidence,,100000,0,,

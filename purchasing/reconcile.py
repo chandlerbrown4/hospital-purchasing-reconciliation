@@ -1,5 +1,6 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
+from datetime import date
 
 from .applications import Application, apply_split_evidence
 from .inputs import Event, SourceRow
@@ -9,7 +10,7 @@ from .inputs import Event, SourceRow
 class InvoiceLine:
     source: SourceRow
     po: Event | None = None
-    first_entry: str | None = None
+    duplicate_candidates: tuple[Event, ...] = ()
     split_basis: str = ""
     allocations: tuple[Application, ...] = ()
     delivered_eaches: int | None = None
@@ -130,6 +131,20 @@ def exact_cents(numerator, denominator):
     return cents if not remainder else None
 
 
+def identify_duplicate_candidates(invoices):
+    # Only original entries anchor the window. A held copy cannot extend it another day.
+    originals = defaultdict(dict)
+    for line in invoices:
+        if line.po is None:
+            continue
+        event = line.source.event
+        days = originals[line.po.key, event.invoice, event.eaches, event.amount_cents]
+        day = date.fromisoformat(event.date).toordinal()
+        line.duplicate_candidates = tuple(days[d] for d in (day, day - 1, day + 1) if d in days)
+        if not line.duplicate_candidates:
+            days[day] = event
+
+
 def reconcile_line(line, receipts, uncertain, prior_billed):
     row, po = line.source, line.po
     invoice = row.event
@@ -145,10 +160,11 @@ def reconcile_line(line, receipts, uncertain, prior_billed):
     if line.expected_cents is not None:
         line.delta_cents = invoice.amount_cents - line.expected_cents
 
-    if line.first_entry != invoice.event_id and not line.split_basis:
+    if line.duplicate_candidates and not line.split_basis:
         row.decision = "possible_duplicate_invoice"
-        row.reason = (f"same vendor invoice, PO line, date, quantity and amount as active event {line.first_entry}; "
-                      "hold this entry pending document review")
+        candidates = ", ".join(f"{event.event_id} ({event.date})" for event in line.duplicate_candidates)
+        row.reason = (f"entry dated {invoice.date} matches the supplier invoice number, PO line, "
+                      f"quantity and amount on {candidates}. Hold for supplier document review")
         return
 
     line.cumulative_billed_eaches = prior_billed + invoice.eaches
@@ -227,15 +243,7 @@ def reconcile(rows, applications=None):
             invoices.append(InvoiceLine(row, po))
 
     uncertain = uncertain_receipts(rows, orders)
-    # Elect the first surviving import for each document-line signature. Allocation still
-    # follows invoice date and event ID, even when the first import sorts after its copy.
-    first_entries = {}
-    for line in invoices:
-        if line.po:
-            event = line.source.event
-            signature = (line.po.key, event.invoice, event.date, event.eaches, event.amount_cents)
-            line.first_entry = first_entries.setdefault(signature, event.event_id)
-
+    identify_duplicate_candidates(invoices)
     apply_split_evidence(invoices, receipts, uncertain, applications)
     billed = defaultdict(int)
     for line in sorted(invoices, key=lambda line: (line.source.event.date, line.source.event.key)):

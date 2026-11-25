@@ -2,13 +2,13 @@ import csv
 import json
 import sqlite3
 from contextlib import closing
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from .applications import load_applications
 from .inputs import load
 from .reconcile import price_book, reconcile
+from .snapshots import stage_snapshot
 
 
 AUDIT_COLUMNS = (
@@ -16,13 +16,15 @@ AUDIT_COLUMNS = (
     "operation", "target_event_id", "decision", "reason", "po_event_id",
     "receipt_event_ids", "uncertain_receipt_event_ids", "source_fields", "normalized_event",
 )
-PRICE_COLUMNS = (
-    "device_id", "effective_from", "effective_to", "unit_price_cents", "currency", "price_source",
-)
-PRICE_EVIDENCE_COLUMNS = ("device_id", "effective_from", "unit_price_cents", "vendor", "invoice",
-                          "invoice_event_id", "po_event_id", "source_file", "source_line")
-OUTPUT_NAMES = ("row_audit.csv", "invoice_differences.csv", "device_prices.csv",
-                "device_price_evidence.csv", "reconciliation.sqlite")
+EXPORTS = {
+    "row_audit": "audit_id",
+    "ap_invoice_rows": "audit_id",
+    "ap_summary": None,
+    "invoice_differences": "vendor, invoice",
+    "device_prices": "device_id, effective_from",
+    "device_price_evidence": "device_id, effective_from, rowid",
+}
+OUTPUT_NAMES = (*(name + ".csv" for name in EXPORTS), "reconciliation.sqlite")
 SCHEMA = """
 CREATE TABLE row_audit (
     audit_id INTEGER PRIMARY KEY,
@@ -77,6 +79,15 @@ CREATE TABLE verified_receipt_applications (
     billed_eaches INTEGER,
     PRIMARY KEY (invoice_audit_id, receipt_event_id)
 );
+CREATE TABLE device_prices (
+    device_id TEXT, effective_from TEXT, effective_to TEXT, unit_price_cents INTEGER,
+    currency TEXT, price_source TEXT, PRIMARY KEY (device_id, effective_from)
+);
+CREATE TABLE device_price_evidence (
+    device_id TEXT, effective_from TEXT, unit_price_cents INTEGER, vendor TEXT,
+    invoice TEXT, invoice_event_id TEXT, po_event_id TEXT, source_file TEXT, source_line INTEGER,
+    FOREIGN KEY (device_id, effective_from) REFERENCES device_prices
+);
 """
 
 
@@ -116,7 +127,13 @@ def invoice_record(audit_id, line):
     )
 
 
-def run(batches, mappings, output, *, receipt_applications=None):
+@dataclass
+class Snapshot:
+    directory: Path
+    differences: list[dict]
+
+
+def build_snapshot(batches, mappings, output, *, receipt_applications=None):
     rows = load(batches, mappings)
     applications = load_applications(receipt_applications) if receipt_applications is not None else None
     lines = reconcile(rows, applications)
@@ -124,14 +141,23 @@ def run(batches, mappings, output, *, receipt_applications=None):
     audit = [audit_record(audit_id, row) for audit_id, row in enumerate(rows, start=1)]
     audit_ids = {id(row): audit_id for audit_id, row in enumerate(rows, start=1)}
     invoice_records = [invoice_record(audit_ids[id(line.source)], line) for line in lines]
-    sql = Path(__file__).with_name("invoice_differences.sql").read_text(encoding="utf-8")
-
-    output.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(prefix=".reconciliation-", dir=output) as folder:
-        staging = Path(folder)
+    with stage_snapshot(output, OUTPUT_NAMES) as (staging, published):
         with closing(sqlite3.connect(staging / "reconciliation.sqlite")) as conn:
             conn.execute("PRAGMA foreign_keys = ON")
             conn.executescript(SCHEMA)
+            for view in ("ap_invoice_rows", "invoice_differences"):
+                query = Path(__file__).with_name(f"{view}.sql").read_text(encoding="utf-8")
+                conn.execute(f"CREATE VIEW {view} AS {query}")
+            conn.execute("""
+                CREATE VIEW ap_summary AS
+                SELECT COUNT(*) AS received,
+                       COUNT(*) FILTER (WHERE disposition = 'matched') AS matched,
+                       COUNT(*) FILTER (WHERE disposition = 'exception') AS exception,
+                       COUNT(*) FILTER (WHERE disposition = 'review') AS review,
+                       COUNT(*) FILTER (WHERE disposition = 'rejected') AS rejected,
+                       COUNT(*) FILTER (WHERE disposition = 'history') AS history
+                FROM ap_invoice_rows
+            """)
             with conn:
                 conn.executemany("INSERT INTO row_audit VALUES (" + ",".join("?" for _ in AUDIT_COLUMNS) + ")", audit)
                 conn.executemany(
@@ -144,14 +170,17 @@ def run(batches, mappings, output, *, receipt_applications=None):
                       bool(line.split_basis), a.billed_eaches) for line in lines if line.cumulative_billed_eaches is not None
                      for a in line.allocations),
                 )
-            cursor = conn.execute(sql)
-            headers = [column[0] for column in cursor.description]
-            differences = cursor.fetchall()
+                conn.executemany("INSERT INTO device_prices VALUES (?, ?, ?, ?, ?, ?)", prices)
+                conn.executemany("INSERT INTO device_price_evidence VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", price_evidence)
+            for table, order in EXPORTS.items():
+                cursor = conn.execute(f"SELECT * FROM {table}" + (f" ORDER BY {order}" if order else ""))
+                headers = [column[0] for column in cursor.description]
+                write_csv(staging / f"{table}.csv", headers, cursor)
+            conn.row_factory = sqlite3.Row
+            differences = [dict(row) for row in conn.execute("SELECT * FROM invoice_differences ORDER BY vendor, invoice")]
+    return Snapshot(published, differences)
 
-        write_csv(staging / "row_audit.csv", AUDIT_COLUMNS, audit)
-        write_csv(staging / "invoice_differences.csv", headers, differences)
-        write_csv(staging / "device_prices.csv", PRICE_COLUMNS, prices)
-        write_csv(staging / "device_price_evidence.csv", PRICE_EVIDENCE_COLUMNS, price_evidence)
-        for name in OUTPUT_NAMES:
-            (staging / name).replace(output / name)
-    return [dict(zip(headers, row)) for row in differences]
+
+def run(batches, mappings, output, *, receipt_applications=None):
+    """Return active invoice differences for existing programmatic callers."""
+    return build_snapshot(batches, mappings, output, receipt_applications=receipt_applications).differences
