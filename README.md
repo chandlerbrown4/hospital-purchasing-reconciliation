@@ -152,6 +152,8 @@ sqlite3 -csv -header build/reconciliation.sqlite < purchasing/invoice_difference
 
 Each successful build closes the SQLite database and finishes all six CSVs before switching one directory pointer. The familiar filenames under `build/` all resolve through that pointer. If the process stops before the switch, AP sees the previous complete snapshot. After the switch, AP sees the complete new one. This requires a filesystem that supports symbolic links and atomic rename. The before and after demo outputs are each a separate snapshot.
 
+Upgrading an earlier checkout? Run `python3 -m purchasing` once after pulling to create the new live paths under `build/`. [Checked-in example outputs](examples/outputs/) are available immediately.
+
 For a multi-file read during a rebuild, use the directory printed with the invoice register, or resolve `build/.purchasing/current` once and open every file there. Prior generations remain available for readers and accumulate under `.purchasing/`. A file-level error such as an unsupported currency or unreadable schema fails the batch before publication. A readable invoice with an invalid quantity appears as rejected with its original source value in the reason.
 
 **Reproduce a stopped batch.** Run `python3 -m examples.recovery_benchmark` on macOS or Linux. The harness kills a worker just before publication, reads the previous snapshot, retries the batch and compares all six CSVs and the SQLite database byte-for-byte against a fresh build. Its synthetic workload uses one invoice and two partial deliveries per order, with additional replays and deliberate price differences.

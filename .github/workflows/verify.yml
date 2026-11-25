@@ -1,5 +1,9 @@
 name: Verify demo
-on: [push, pull_request]
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 
@@ -37,3 +41,22 @@ jobs:
           done
       - name: Exercise the recovery benchmark
         run: python3 -m examples.recovery_benchmark --orders 200
+
+  surgical-handoff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: hospital-purchasing-reconciliation
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          repository: chandlerbrown4/surgical-case-outcomes
+          path: surgical-case-outcomes
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Verify the downstream surgical case costs
+        working-directory: surgical-case-outcomes
+        run: python3 examples/check_purchasing_handoff.py
