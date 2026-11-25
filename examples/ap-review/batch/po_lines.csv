@@ -1,0 +1,4 @@
+event_id,vendor,po,po_line,sku,date,qty,unit,unit_price
+P06,Birch Goods,B01,1,LAMP,2025-03-01,12,EA,46
+P07,Birch Goods,B02,1,LAMP,2025-03-01,8,EA,46
+P08,Birch Goods,B03,1,GLOVE,2025-03-01,3,PK,14

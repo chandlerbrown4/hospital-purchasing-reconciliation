@@ -1,0 +1,8 @@
+event_id,vendor,invoice,po,po_line,sku,date,qty,unit,unit_price
+O01,Birch Goods,bg402,B01,1,LAMP,2025-03-03,3,EA,46
+O02,Birch Goods,BG402,B01,1,LAMP,2025-03-04,3,EA,46
+C01,Birch Goods,B-801,B02,1,LAMP,2025-03-03,4,EA,46
+C02,Birch Goods,B-802,B02,1,LAMP,2025-03-04,4,EA,46
+C04,Birch Goods,B-804,B03,1,GLOVE,2025-03-04,4,EA,3.25
+C02,Birch Goods,B-802,B02,1,LAMP,2025-03-04,4,EA,46
+Q01,Birch Goods,B-809,B01,1,LAMP,2025-03-03,three,EA,46

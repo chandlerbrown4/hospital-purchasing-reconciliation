@@ -27,3 +27,13 @@ jobs:
           for csv in examples/outputs/*.csv examples/outputs/before/*.csv; do
             cmp "$csv" "build/${csv#examples/outputs/}"
           done
+      - name: Reproduce the published AP registers and control totals
+        run: |
+          python3 -m purchasing examples/ap-review/batch --mappings evaluation/held-out-v1 --output build/ap-review-day
+          python3 -m purchasing evaluation/held-out-v1/batch --mappings evaluation/held-out-v1 --output build/ap-review
+          for csv in ap_invoice_rows.csv ap_summary.csv; do
+            cmp "examples/ap-review/$csv" "build/ap-review-day/$csv"
+            cmp "examples/ap-review/original-batch/$csv" "build/ap-review/$csv"
+          done
+      - name: Exercise the recovery benchmark
+        run: python3 -m examples.recovery_benchmark --orders 200

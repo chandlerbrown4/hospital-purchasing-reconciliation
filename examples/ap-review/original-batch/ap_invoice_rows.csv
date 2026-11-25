@@ -1,0 +1,18 @@
+audit_id,batch,source_file,source_line,vendor,invoice,event_id,disposition,decision,reason,target_event_id,actual_cents,delta_cents,unbacked_eaches,unbacked_po_cents
+25,1,evaluation/held-out-v1/batch/invoices.csv,2,ASTER,M-1,M01,exception,price_variance,actual invoice charge differs from the PO rate,,4050000,50000,0,0
+26,1,evaluation/held-out-v1/batch/invoices.csv,3,ASTER,M-2,M02,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date,,500000,0,2,500000
+27,1,evaluation/held-out-v1/batch/invoices.csv,4,ASTER,M-2,M03,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date; actual invoice charge differs from the PO rate,,8200,200,2,8000
+28,1,evaluation/held-out-v1/batch/invoices.csv,5,ASTER,M-3,M04,exception,price_variance,actual invoice charge differs from the PO rate,,864000,64000,0,0
+29,1,evaluation/held-out-v1/batch/invoices.csv,6,ASTER,M-4,M05,exception,price_variance,actual invoice charge differs from the PO rate,,108000,8000,0,0
+30,1,evaluation/held-out-v1/batch/invoices.csv,7,ASTER,M-5,M06,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date; cumulative billed eaches exceed ordered eaches; actual invoice charge differs from the PO rate,,216000,16000,100,100000
+31,1,evaluation/held-out-v1/batch/invoices.csv,8,ASTER,F-1,F01,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,500000,0,0,0
+32,1,evaluation/held-out-v1/batch/invoices.csv,9,BIRCH,BG402,O01,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,13800,0,0,0
+33,1,evaluation/held-out-v1/batch/invoices.csv,10,BIRCH,BG402,O02,review,possible_duplicate_invoice,"entry dated 2025-03-03 matches the supplier invoice number, PO line, quantity and amount on O01 (2025-03-03). Hold for supplier document review",,13800,0,,
+34,1,evaluation/held-out-v1/batch/invoices.csv,11,BIRCH,B-801,C01,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,18400,0,0,0
+35,1,evaluation/held-out-v1/batch/invoices.csv,12,BIRCH,B-802,C02,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,18400,0,0,0
+36,1,evaluation/held-out-v1/batch/invoices.csv,13,BIRCH,B-803,C03,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,2800,0,0,0
+37,1,evaluation/held-out-v1/batch/invoices.csv,14,BIRCH,B-804,C04,exception,price_variance,actual invoice charge differs from the PO rate,,1300,-100,0,0
+38,1,evaluation/held-out-v1/batch/invoices.csv,15,BIRCH,B-805,C05,review,ambiguous_po_line,"candidate PO events: P09, P10",,9200,,,
+39,1,evaluation/held-out-v1/batch/invoices.csv,16,BIRCH,B-806,C06,review,uncertain_receipts,quantity coverage requires review of conflicting or ambiguous receipt evidence,,27600,0,,
+40,1,evaluation/held-out-v1/batch/invoices.csv,17,BIRCH,B-807,C07,exception,insufficient_receipts,cumulative billed eaches exceed receipts on the invoice date,,9200,0,2,9200
+41,1,evaluation/held-out-v1/batch/invoices.csv,18,BIRCH,B-808,C08,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,13800,0,0,0

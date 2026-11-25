@@ -1,0 +1,8 @@
+audit_id,batch,source_file,source_line,vendor,invoice,event_id,disposition,decision,reason,target_event_id,actual_cents,delta_cents,unbacked_eaches,unbacked_po_cents
+8,1,examples/ap-review/batch/invoices.csv,2,BIRCH,BG402,O01,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,13800,0,0,0
+9,1,examples/ap-review/batch/invoices.csv,3,BIRCH,BG402,O02,review,possible_duplicate_invoice,"entry dated 2025-03-04 matches the supplier invoice number, PO line, quantity and amount on O01 (2025-03-03). Hold for supplier document review",,13800,0,,
+10,1,examples/ap-review/batch/invoices.csv,4,BIRCH,B-801,C01,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,18400,0,0,0
+11,1,examples/ap-review/batch/invoices.csv,5,BIRCH,B-802,C02,matched,matched,invoice quantity covered by PO and receipts and charge matches PO rate,,18400,0,0,0
+12,1,examples/ap-review/batch/invoices.csv,6,BIRCH,B-804,C04,exception,price_variance,actual invoice charge differs from the PO rate,,1300,-100,0,0
+13,1,examples/ap-review/batch/invoices.csv,7,BIRCH,B-802,C02,history,replay,same event identity and normalized payload,,,,,
+14,1,examples/ap-review/batch/invoices.csv,8,Birch Goods,B-809,Q01,rejected,invalid,invalid positive integer quantity: 'three',,,,,
